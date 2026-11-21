@@ -264,16 +264,18 @@ export default function App() {
     const s = g.current;
     if (!s || s.busy || s.phase !== 'roll') return;
     s.busy = true;
-    s.rollId++;
     const pl = s.players[s.current];
+    pl.rollId = (pl.rollId || 0) + 1;
     for (let k = 0; k < 7; k++) {
       s.dice = 1 + Math.floor(Math.random() * 6);
+      pl.lastDice = s.dice;
       render();
       await sleep(60);
       if (g.current !== s) return;
     }
     const v = 1 + Math.floor(Math.random() * 6);
     s.dice = v;
+    pl.lastDice = v;
     s.sixes = v === 6 ? s.sixes + 1 : 0;
 
     if (s.sixes === 3) {
@@ -441,6 +443,41 @@ export default function App() {
   const boardMax = Math.min(width - 16, 460);
   const cell = Math.floor(boardMax / 15);
   const canRoll = s.phase === 'roll' && !s.busy && cur.type === 'human';
+  const diceSize = Math.min(78, Math.floor(cell * 2.6));
+
+  // Un dé à côté de chaque couleur (vide si la couleur ne joue pas)
+  function diceFor(color) {
+    const pi = s.players.findIndex((p) => p.color === color);
+    if (pi === -1) return <View style={{ width: diceSize, height: diceSize + 16 }} />;
+    const pl = s.players[pi];
+    const isCur = pi === s.current && s.phase !== 'over';
+    const done = pl.tokens.filter((t) => t === GOAL).length;
+    return (
+      <View style={{ alignItems: 'center', opacity: isCur ? 1 : 0.35 }}>
+        <Dice
+          size={diceSize}
+          value={pl.lastDice}
+          color={COLORS[color].main}
+          enabled={isCur && canRoll}
+          blink={blink}
+          onPress={roll}
+          rollId={pl.rollId}
+        />
+        <View style={styles.progress}>
+          {[0, 1, 2, 3].map((k) => (
+            <View
+              key={k}
+              style={[
+                styles.progressDot,
+                { borderColor: COLORS[color].main },
+                k < done && { backgroundColor: COLORS[color].main },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -452,39 +489,20 @@ export default function App() {
         </Pressable>
       </View>
 
-      <View style={styles.chips}>
-        {s.players.map((pl, pi) => (
-          <View
-            key={pl.color}
-            style={[
-              styles.chip,
-              { borderColor: COLORS[pl.color].main },
-              pi === s.current && { backgroundColor: COLORS[pl.color].main },
-            ]}
-          >
-            <Text style={styles.chipText}>
-              {COLORS[pl.color].name} {pl.tokens.filter((t) => t === GOAL).length}/4
-            </Text>
-          </View>
-        ))}
-      </View>
+      <View style={styles.playArea}>
+        <View style={[styles.diceRow, { width: cell * 15 }]}>
+          {diceFor('red')}
+          {diceFor('green')}
+        </View>
 
-      <View style={styles.boardWrap}>
-        <Board s={s} cell={cell} blink={blink} onToken={onToken} />
-      </View>
+        <View style={styles.boardWrap}>
+          <Board s={s} cell={cell} blink={blink} onToken={onToken} />
+        </View>
 
-      <Text style={styles.message}>{s.message}</Text>
-
-      <View style={styles.diceArea}>
-        <Dice
-          value={s.dice}
-          color={COLORS[cur.color].main}
-          enabled={canRoll}
-          blink={blink}
-          onPress={roll}
-          rollId={s.rollId}
-        />
-        {canRoll ? <Text style={styles.diceHint}>Touche le dé</Text> : null}
+        <View style={[styles.diceRow, { width: cell * 15 }]}>
+          {diceFor('blue')}
+          {diceFor('yellow')}
+        </View>
       </View>
 
       {s.phase === 'over' ? (
@@ -859,7 +877,7 @@ function Banner({ text }) {
 // ---------- DÉ (3D, qui tourne) ----------
 const DOTS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-function Dice({ value, color, enabled, blink, onPress, rollId }) {
+function Dice({ value, color, enabled, blink, onPress, rollId, size = 80 }) {
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!rollId) return;
@@ -876,17 +894,48 @@ function Dice({ value, color, enabled, blink, onPress, rollId }) {
   const scale = spin.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.3, 1] });
   const dots = value ? DOTS[value] : [];
   const big = value === 1;
+  const grid = size * 0.6;
+  const slot = grid / 3;
+  const dot = slot * 0.7;
 
   return (
-    <Pressable onPress={onPress} disabled={!enabled}>
-      <View style={{ transform: [{ scale: enabled && blink ? 1.08 : 1 }] }}>
-        <Animated.View style={[styles.diceOuter, { backgroundColor: color, transform: [{ rotate }, { scale }] }]}>
-          <View style={styles.diceFace}>
-            <View style={styles.diceGrid}>
+    <Pressable onPress={onPress} disabled={!enabled} hitSlop={10}>
+      <View style={{ transform: [{ scale: enabled && blink ? 1.1 : 1 }] }}>
+        <Animated.View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size * 0.26,
+            padding: size * 0.06,
+            backgroundColor: color,
+            elevation: 10,
+            transform: [{ rotate }, { scale }],
+          }}
+        >
+          <View
+            style={{
+              flex: 1,
+              borderRadius: size * 0.2,
+              backgroundColor: '#FFFFFF',
+              borderBottomWidth: size * 0.07,
+              borderRightWidth: size * 0.035,
+              borderColor: '#CFCFE0',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <View style={{ width: grid, height: grid, flexDirection: 'row', flexWrap: 'wrap' }}>
               {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => (
-                <View key={k} style={styles.diceSlot}>
+                <View key={k} style={{ width: slot, height: slot, alignItems: 'center', justifyContent: 'center' }}>
                   {dots.includes(k) ? (
-                    <View style={[styles.dot, big && styles.dotBig, big && { backgroundColor: '#E53935' }]} />
+                    <View
+                      style={{
+                        width: big ? dot * 1.5 : dot,
+                        height: big ? dot * 1.5 : dot,
+                        borderRadius: dot,
+                        backgroundColor: big ? '#E53935' : '#14142B',
+                      }}
+                    />
                   ) : null}
                 </View>
               ))}
@@ -935,6 +984,10 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 2, borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 },
   chipText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
   boardWrap: { alignItems: 'center', justifyContent: 'center' },
+  playArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 30 },
+  diceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 10, paddingHorizontal: 4 },
+  progress: { flexDirection: 'row', marginTop: 6, gap: 4 },
+  progressDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5 },
   cell: { position: 'absolute', borderWidth: 0.5, borderColor: '#555', alignItems: 'center', justifyContent: 'center' },
   message: { color: '#FFFFFF', fontSize: 16, textAlign: 'center', marginTop: 12, paddingHorizontal: 16, minHeight: 44 },
   diceArea: { alignItems: 'center', marginTop: 4 },
