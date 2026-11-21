@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "pionix",
+    "name": "Pionix",
     "slug": "pionix",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,10 +15,16 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.cedricgigi.pionix"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b00a496d-8862-49f9-af99-e8a7954099b6"
+      }
     }
   }
 }
