@@ -1,20 +1,18 @@
 {
   "expo": {
-    "name": "Pionix",
+    "name": "Ludo Drama",
     "slug": "pionix",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/pionix-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/pionix-adaptive.png",
+        "backgroundColor": "#FBC02D"
       },
       "package": "com.cedricgigi.pionix"
     },
@@ -25,6 +23,11 @@
       "eas": {
         "projectId": "b00a496d-8862-49f9-af99-e8a7954099b6"
       }
+    },
+    "splash": {
+      "image": "./assets/pionix-splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#14142B"
     }
   }
 }
