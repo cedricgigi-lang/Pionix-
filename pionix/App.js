@@ -1,6 +1,8 @@
 // Pionix — Ludo entre amis (version 1 : contre l'ordinateur ou sur le même téléphone)
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   View,
   Text,
   Pressable,
@@ -12,10 +14,10 @@ import {
 
 // === LOGIQUE ===
 const COLORS = {
-  red: { main: '#E53935', light: '#FFCDD2', name: 'Rouge' },
-  green: { main: '#43A047', light: '#C8E6C9', name: 'Vert' },
-  yellow: { main: '#FBC02D', light: '#FFF9C4', name: 'Jaune' },
-  blue: { main: '#1E88E5', light: '#BBDEFB', name: 'Bleu' },
+  red: { main: '#E53935', light: '#FFCDD2', dark: '#8E1B1B', name: 'Rouge' },
+  green: { main: '#43A047', light: '#C8E6C9', dark: '#1B5E20', name: 'Vert' },
+  yellow: { main: '#FBC02D', light: '#FFF9C4', dark: '#9A6F00', name: 'Jaune' },
+  blue: { main: '#1E88E5', light: '#BBDEFB', dark: '#0D3C8C', name: 'Bleu' },
 };
 const ORDER = ['red', 'green', 'yellow', 'blue'];
 
@@ -97,6 +99,9 @@ function createGame(count, types) {
     busy: false,
     winner: null,
     message: '',
+    effects: [], // pluies d'emojis en cours
+    banner: null, // grand message animé au centre
+    rollId: 0, // fait tourner le dé
   };
 }
 
@@ -179,6 +184,14 @@ function aiChoose(s) {
 // === FIN LOGIQUE ===
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Emojis des effets
+const EMOJIS = {
+  arrive: ['🎉', '🥳', '⭐', '✨', '🏆', '🎊', '💫', '🙌'],
+  capture: ['💥', '😈', '🔥', '😂', '⚡', '👊', '😜', '💨'],
+  win: ['🏆', '👑', '🎊', '🎉', '🥇', '🌟', '🥳', '💃', '🕺', '✨'],
+};
+let fxCounter = 0;
 const nameOf = (pl) => COLORS[pl.color].name + (pl.type === 'ai' ? ' (ordi)' : '');
 const turnMsg = (s) => {
   const pl = s.players[s.current];
@@ -200,6 +213,19 @@ export default function App() {
     const t = setInterval(() => setBlink((b) => !b), 450);
     return () => clearInterval(t);
   }, []);
+
+  // Lance une pluie d'emojis (sur une case) et/ou un grand message
+  function fx(s, kind, cellRC, text) {
+    const id = ++fxCounter;
+    if (kind && cellRC) s.effects.push({ id, kind, r: cellRC[0], c: cellRC[1] });
+    if (text) s.banner = { id, text };
+    render();
+    setTimeout(() => {
+      s.effects = s.effects.filter((e) => e.id !== id);
+      if (s.banner && s.banner.id === id) s.banner = null;
+      if (g.current === s) render();
+    }, 1800);
+  }
 
   function scheduleAI(s) {
     const pl = s.players[s.current];
@@ -238,6 +264,7 @@ export default function App() {
     const s = g.current;
     if (!s || s.busy || s.phase !== 'roll') return;
     s.busy = true;
+    s.rollId++;
     const pl = s.players[s.current];
     for (let k = 0; k < 7; k++) {
       s.dice = 1 + Math.floor(Math.random() * 6);
@@ -251,7 +278,7 @@ export default function App() {
 
     if (s.sixes === 3) {
       s.message = `${nameOf(pl)} fait trois 6 : tour perdu !`;
-      render();
+      fx(s, null, null, '😱 Trois 6 ! Tour perdu');
       await sleep(1200);
       if (g.current !== s) return;
       s.busy = false;
@@ -269,6 +296,8 @@ export default function App() {
       nextPlayer(s);
       return;
     }
+
+    if (v === 6) fx(s, null, null, '🎲 SIX ! 🔥');
 
     s.movable = movable;
     s.phase = 'move';
@@ -313,6 +342,9 @@ export default function App() {
     }
 
     const res = resolveMove(s, i);
+    const np = pl.tokens[i];
+    if (res.caught) fx(s, 'capture', tokenCell(pl.color, np, i), '💥 CAPTURE ! 💥');
+    if (res.arrived) fx(s, 'arrive', FINISH[pl.color], '🎉 PION ARRIVÉ ! 🎉');
     if (res.won) {
       s.winner = s.current;
       s.phase = 'over';
@@ -350,7 +382,7 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.menu}>
           <View style={styles.logoRow}>
             {ORDER.map((c) => (
-              <View key={c} style={[styles.logoPawn, { backgroundColor: COLORS[c].main }]} />
+              <Pawn key={c} color={c} size={38} />
             ))}
           </View>
           <Text style={styles.title}>Pionix</Text>
@@ -450,14 +482,21 @@ export default function App() {
           enabled={canRoll}
           blink={blink}
           onPress={roll}
+          rollId={s.rollId}
         />
         {canRoll ? <Text style={styles.diceHint}>Touche le dé</Text> : null}
       </View>
 
       {s.phase === 'over' ? (
         <View style={styles.overlay}>
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <Burst kind="win" x={width / 2} y={200} cell={40} count={14} />
+            <Burst kind="win" x={width / 4} y={420} cell={34} count={10} />
+            <Burst kind="win" x={(width * 3) / 4} y={420} cell={34} count={10} />
+          </View>
           <View style={styles.winBox}>
             <Text style={styles.winEmoji}>🏆</Text>
+            <Text style={styles.winConfetti}>🎊 🥳 🎊</Text>
             <Text style={[styles.winText, { color: COLORS[s.players[s.winner].color].main }]}>
               {nameOf(s.players[s.winner])} a gagné !
             </Text>
@@ -589,77 +628,271 @@ function Board({ s, cell, blink, onToken }) {
     })
   );
   const current = s.players[s.current];
+  const pawns = [];
   Object.values(groups).forEach((list) =>
     list.forEach((t, k) => {
       const n = list.length;
-      let sz = cell * 0.8;
-      let offR = cell * 0.1;
-      let offC = cell * 0.1;
+      let sz = cell * 0.86;
+      let offR = cell * 0.08;
+      let offC = cell * 0.07;
       if (n > 1) {
-        sz = cell * 0.55;
+        sz = cell * 0.56;
         const [a, b] = [[0, 0], [0, 1], [1, 0], [1, 1]][k % 4];
-        offR = a * cell * 0.45;
-        offC = b * cell * 0.45;
+        offR = a * cell * 0.44;
+        offC = b * cell * 0.44;
       }
       const active =
         s.phase === 'move' &&
         t.pi === s.current &&
         current.type === 'human' &&
         s.movable.includes(t.ti);
-      parts.push(
+      const h = sz * 1.25;
+      const bottom = t.r * cell + offR + sz; // bas du pion
+      pawns.push({ bottom, el: (
         <Pressable
           key={'p' + t.pl.color + t.ti}
           onPress={() => onToken(t.pi, t.ti)}
           hitSlop={8}
           style={{
             position: 'absolute',
-            top: t.r * cell + offR,
+            top: bottom - h,
             left: t.c * cell + offC,
             width: sz,
-            height: sz,
-            borderRadius: sz / 2,
-            backgroundColor: COLORS[t.pl.color].main,
-            borderWidth: active ? 3 : 2,
-            borderColor: active ? (blink ? '#000000' : '#FFFFFF') : '#FFFFFF',
-            alignItems: 'center',
-            justifyContent: 'center',
-            elevation: active ? 8 : 4,
-            transform: [{ scale: active && blink ? 1.15 : 1 }],
+            height: h,
+            transform: [{ translateY: active && blink ? -cell * 0.18 : 0 }],
           }}
         >
-          <View
-            style={{
-              width: sz * 0.4,
-              height: sz * 0.4,
-              borderRadius: sz * 0.2,
-              backgroundColor: 'rgba(255,255,255,0.55)',
-            }}
-          />
+          {active ? (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: -sz * 0.08,
+                left: -sz * 0.1,
+                width: sz * 1.2,
+                height: sz * 0.5,
+                borderRadius: sz,
+                backgroundColor: blink ? '#FFFFFF' : COLORS[t.pl.color].light,
+                borderWidth: 2,
+                borderColor: COLORS[t.pl.color].dark,
+              }}
+            />
+          ) : null}
+          <Pawn color={t.pl.color} size={sz} />
         </Pressable>
-      );
+      ) });
     })
   );
+  // Les pions plus bas à l'écran passent devant
+  pawns.sort((a, b) => a.bottom - b.bottom).forEach((p) => parts.push(p.el));
 
-  return <View style={{ width: size, height: size, backgroundColor: '#FFFFFF' }}>{parts}</View>;
+  // Pluies d'emojis
+  s.effects.forEach((e) =>
+    parts.push(
+      <Burst key={'fx' + e.id} kind={e.kind} x={(e.c + 0.5) * cell} y={(e.r + 0.5) * cell} cell={cell} />
+    )
+  );
+
+  return (
+    <View style={{ width: size, height: size, backgroundColor: '#FFFFFF' }}>
+      {parts}
+      {s.banner ? (
+        <View pointerEvents="none" style={styles.bannerWrap}>
+          <Banner key={'b' + s.banner.id} text={s.banner.text} />
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
-// ---------- DÉ ----------
+// ---------- PION (forme de quille) ----------
+function Pawn({ color, size }) {
+  const c = COLORS[color];
+  const line = Math.max(1, size * 0.05);
+  return (
+    <View style={{ width: size, height: size * 1.25, alignItems: 'center' }}>
+      {/* ombre */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          width: size * 0.92,
+          height: size * 0.26,
+          borderRadius: size,
+          backgroundColor: 'rgba(0,0,0,0.3)',
+        }}
+      />
+      {/* socle */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: size * 0.05,
+          width: size * 0.86,
+          height: size * 0.42,
+          borderTopLeftRadius: size * 0.43,
+          borderTopRightRadius: size * 0.43,
+          borderBottomLeftRadius: size * 0.18,
+          borderBottomRightRadius: size * 0.18,
+          backgroundColor: c.main,
+          borderWidth: line,
+          borderColor: c.dark,
+        }}
+      />
+      {/* cou */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: size * 0.4,
+          width: size * 0.3,
+          height: size * 0.24,
+          backgroundColor: c.main,
+          borderLeftWidth: line,
+          borderRightWidth: line,
+          borderColor: c.dark,
+        }}
+      />
+      {/* tête */}
+      <View
+        style={{
+          position: 'absolute',
+          bottom: size * 0.56,
+          width: size * 0.6,
+          height: size * 0.6,
+          borderRadius: size * 0.3,
+          backgroundColor: c.main,
+          borderWidth: line,
+          borderColor: c.dark,
+        }}
+      >
+        {/* reflet brillant */}
+        <View
+          style={{
+            position: 'absolute',
+            top: size * 0.07,
+            left: size * 0.1,
+            width: size * 0.18,
+            height: size * 0.13,
+            borderRadius: size * 0.1,
+            backgroundColor: 'rgba(255,255,255,0.75)',
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+// ---------- EFFETS ----------
+function Burst({ kind, x, y, cell, count = 9 }) {
+  const items = useRef(
+    Array.from({ length: count }, (_, k) => ({
+      emoji: EMOJIS[kind][k % EMOJIS[kind].length],
+      dx: (Math.random() - 0.5) * cell * 7,
+      dy: -(cell * 2 + Math.random() * cell * 4),
+      rot: (Math.random() - 0.5) * 540,
+      anim: new Animated.Value(0),
+    }))
+  ).current;
+
+  useEffect(() => {
+    Animated.stagger(
+      45,
+      items.map((it) =>
+        Animated.timing(it.anim, {
+          toValue: 1,
+          duration: 1400,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        })
+      )
+    ).start();
+  }, []);
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {items.map((it, k) => (
+        <Animated.Text
+          key={k}
+          style={{
+            position: 'absolute',
+            left: x - cell * 0.55,
+            top: y - cell * 0.65,
+            fontSize: cell * 1.1,
+            opacity: it.anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
+            transform: [
+              { translateX: it.anim.interpolate({ inputRange: [0, 1], outputRange: [0, it.dx] }) },
+              { translateY: it.anim.interpolate({ inputRange: [0, 1], outputRange: [0, it.dy] }) },
+              { scale: it.anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.3, 1.4, 1] }) },
+              { rotate: it.anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', it.rot + 'deg'] }) },
+            ],
+          }}
+        >
+          {it.emoji}
+        </Animated.Text>
+      ))}
+    </View>
+  );
+}
+
+function Banner({ text }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(a, { toValue: 1, friction: 4, tension: 80, useNativeDriver: true }),
+      Animated.delay(900),
+      Animated.timing(a, { toValue: 2, duration: 300, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View
+      style={[
+        styles.banner,
+        {
+          opacity: a.interpolate({ inputRange: [0, 0.3, 1, 2], outputRange: [0, 1, 1, 0] }),
+          transform: [{ scale: a.interpolate({ inputRange: [0, 1, 2], outputRange: [0.3, 1, 1.2] }) }],
+        },
+      ]}
+    >
+      <Text style={styles.bannerText}>{text}</Text>
+    </Animated.View>
+  );
+}
+
+// ---------- DÉ (3D, qui tourne) ----------
 const DOTS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-function Dice({ value, color, enabled, blink, onPress }) {
+function Dice({ value, color, enabled, blink, onPress, rollId }) {
+  const spin = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!rollId) return;
+    spin.setValue(0);
+    Animated.timing(spin, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [rollId]);
+
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '720deg'] });
+  const scale = spin.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.3, 1] });
   const dots = value ? DOTS[value] : [];
+  const big = value === 1;
+
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={!enabled}
-      style={[styles.dice, { borderColor: color, borderWidth: enabled && blink ? 6 : 3 }]}
-    >
-      <View style={styles.diceGrid}>
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => (
-          <View key={k} style={styles.diceSlot}>
-            {dots.includes(k) ? <View style={styles.dot} /> : null}
+    <Pressable onPress={onPress} disabled={!enabled}>
+      <View style={{ transform: [{ scale: enabled && blink ? 1.08 : 1 }] }}>
+        <Animated.View style={[styles.diceOuter, { backgroundColor: color, transform: [{ rotate }, { scale }] }]}>
+          <View style={styles.diceFace}>
+            <View style={styles.diceGrid}>
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => (
+                <View key={k} style={styles.diceSlot}>
+                  {dots.includes(k) ? (
+                    <View style={[styles.dot, big && styles.dotBig, big && { backgroundColor: '#E53935' }]} />
+                  ) : null}
+                </View>
+              ))}
+            </View>
           </View>
-        ))}
+        </Animated.View>
       </View>
     </Pressable>
   );
@@ -705,10 +938,32 @@ const styles = StyleSheet.create({
   cell: { position: 'absolute', borderWidth: 0.5, borderColor: '#555', alignItems: 'center', justifyContent: 'center' },
   message: { color: '#FFFFFF', fontSize: 16, textAlign: 'center', marginTop: 12, paddingHorizontal: 16, minHeight: 44 },
   diceArea: { alignItems: 'center', marginTop: 4 },
-  dice: { width: 84, height: 84, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  diceOuter: { width: 92, height: 92, borderRadius: 24, padding: 5, elevation: 10 },
+  diceFace: {
+    flex: 1,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 6,
+    borderRightWidth: 3,
+    borderColor: '#CFCFE0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   diceGrid: { width: 60, height: 60, flexDirection: 'row', flexWrap: 'wrap' },
   diceSlot: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
-  dot: { width: 13, height: 13, borderRadius: 7, backgroundColor: '#14142B' },
+  dot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#14142B', borderTopWidth: 2, borderColor: '#000000' },
+  dotBig: { width: 22, height: 22, borderRadius: 11 },
+  bannerWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  banner: {
+    backgroundColor: 'rgba(20,20,43,0.92)',
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: '#FBC02D',
+  },
+  bannerText: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', textAlign: 'center' },
+  winConfetti: { fontSize: 30, marginTop: 4 },
   diceHint: { color: '#B0B0D0', marginTop: 6 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
   winBox: { backgroundColor: '#24244A', borderRadius: 20, padding: 28, alignItems: 'center', width: '85%' },
